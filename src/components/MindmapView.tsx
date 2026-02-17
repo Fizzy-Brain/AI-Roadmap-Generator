@@ -10,6 +10,7 @@ import {
   Position,
   useReactFlow,
   ReactFlowProvider,
+  getNodesBounds,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { MindmapData, MindmapNode } from "@/types/roadmap";
@@ -41,6 +42,7 @@ function CustomNode({
     childCount?: number;
     collapsed?: boolean;
     onToggle?: () => void;
+    side?: "left" | "right";
   };
 }) {
   const isRoot = data.isRoot;
@@ -110,7 +112,7 @@ function CustomNode({
     >
       <Handle
         type="target"
-        position={Position.Left}
+        position={data.side === "left" ? Position.Right : Position.Left}
         className="!w-0 !h-0 !border-0 !bg-transparent !min-w-0 !min-h-0"
       />
       <div className="flex items-center justify-center gap-1.5">
@@ -145,9 +147,25 @@ function CustomNode({
       </div>
       <Handle
         type="source"
-        position={Position.Right}
+        position={data.side === "left" ? Position.Left : Position.Right}
         className="!w-0 !h-0 !border-0 !bg-transparent !min-w-0 !min-h-0"
       />
+      {data.isRoot && (
+        <>
+          <Handle
+            type="source"
+            id="source-left"
+            position={Position.Left}
+            className="!w-0 !h-0 !border-0 !bg-transparent !min-w-0 !min-h-0"
+          />
+          <Handle
+            type="source"
+            id="source-right"
+            position={Position.Right}
+            className="!w-0 !h-0 !border-0 !bg-transparent !min-w-0 !min-h-0"
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -163,12 +181,10 @@ interface BuildState {
 
 const NODE_HEIGHT = 44;
 const NODE_GAP = 12;
+const X_SPACING = 240;
 
 /**
  * Pre-compute the vertical space a subtree requires.
- * A leaf (or collapsed node) takes NODE_HEIGHT.
- * An expanded parent takes the sum of its children's heights
- * plus gaps between them.
  */
 function subtreeHeight(
   node: MindmapNode,
@@ -200,10 +216,6 @@ function buildFlowGraph(
   const edges: Edge[] = [];
   let maxDepth = 0;
 
-  /**
-   * Walk up the pathIndices to find the depth-1 ancestor's color.
-   * This is the "branch color" that tints the entire branch.
-   */
   function getBranchColor(pathIndices: number[]): string | undefined {
     if (pathIndices.length === 0) return undefined;
     const firstIdx = pathIndices[0];
@@ -220,10 +232,10 @@ function buildFlowGraph(
     yOffset: number,
     pathStr: string,
     pathIndices: number[],
-    inheritedColor?: string
+    inheritedColor?: string,
+    side: "left" | "right" = "right"
   ): void {
     const currentId = pathStr;
-    // Priority: node's own color from backend > inherited from parent > branch ancestor
     const ownColor = node.color;
     const branchColor = getBranchColor(pathIndices);
     const effectiveColor = ownColor || inheritedColor || branchColor;
@@ -232,14 +244,16 @@ function buildFlowGraph(
     const isCollapsed = collapsedPaths.has(pathStr);
     const childCount = node.children?.length || 0;
 
-    // Compute center Y for this node based on its subtree height
     const myHeight = subtreeHeight(node, pathStr, collapsedPaths);
     const centerY = yOffset + myHeight / 2 - NODE_HEIGHT / 2;
+
+    // For left side, X goes negative; for right side, X goes positive
+    const xPos = depth === 0 ? 0 : side === "right" ? depth * X_SPACING : -(depth * X_SPACING);
 
     nodes.push({
       id: currentId,
       type: "custom",
-      position: { x: depth * 240, y: centerY },
+      position: { x: xPos, y: centerY },
       data: {
         label: node.name,
         color: depth === 0 ? undefined : effectiveColor,
@@ -248,6 +262,7 @@ function buildFlowGraph(
         childCount,
         collapsed: isCollapsed,
         onToggle: childCount > 0 ? () => onToggle(pathStr) : undefined,
+        side,
       },
     });
 
@@ -256,6 +271,7 @@ function buildFlowGraph(
         id: `e-${parentId}-${currentId}`,
         source: parentId,
         target: currentId,
+        sourceHandle: depth === 1 ? (side === "left" ? "source-left" : "source-right") : undefined,
         style: {
           stroke: effectiveColor || "#a5b4fc",
           strokeWidth: depth <= 2 ? 2.5 : 1.5,
@@ -280,14 +296,91 @@ function buildFlowGraph(
         childY,
         childPath,
         [...pathIndices, i],
-        effectiveColor
+        effectiveColor,
+        side
       );
       childY +=
         subtreeHeight(child, childPath, collapsedPaths) + NODE_GAP;
     }
   }
 
-  traverse(rootNode, null, 0, 0, "root", []);
+  // Split root children into right and left halves
+  const rootChildren = rootNode.children || [];
+  const half = Math.ceil(rootChildren.length / 2);
+  const rightChildren = rootChildren.slice(0, half);
+  const leftChildren = rootChildren.slice(half);
+
+  // Compute yOffsets for right side
+  let rightTotalH = 0;
+  for (let i = 0; i < rightChildren.length; i++) {
+    if (i > 0) rightTotalH += NODE_GAP;
+    rightTotalH += subtreeHeight(rightChildren[i], `root-${i}`, collapsedPaths);
+  }
+
+  // Compute yOffsets for left side
+  let leftTotalH = 0;
+  for (let i = 0; i < leftChildren.length; i++) {
+    if (i > 0) leftTotalH += NODE_GAP;
+    leftTotalH += subtreeHeight(leftChildren[i], `root-${half + i}`, collapsedPaths);
+  }
+
+  // Center root vertically between the two sides
+  const maxTotalH = Math.max(rightTotalH, leftTotalH, NODE_HEIGHT);
+  const rootY = maxTotalH / 2 - NODE_HEIGHT / 2;
+
+  // Place root node
+  nodes.push({
+    id: "root",
+    type: "custom",
+    position: { x: 0, y: rootY },
+    data: {
+      label: rootNode.name,
+      isRoot: true,
+      depth: 0,
+      childCount: rootChildren.length,
+      collapsed: false,
+      onToggle: rootChildren.length > 0 ? () => onToggle("root") : undefined,
+      side: "right" as const,
+    },
+  });
+
+  // Traverse right children
+  const rightStartY = maxTotalH / 2 - rightTotalH / 2;
+  let childY = rightStartY;
+  for (let i = 0; i < rightChildren.length; i++) {
+    const childPath = `root-${i}`;
+    traverse(
+      rightChildren[i],
+      "root",
+      1,
+      childY,
+      childPath,
+      [i],
+      undefined,
+      "right"
+    );
+    childY += subtreeHeight(rightChildren[i], childPath, collapsedPaths) + NODE_GAP;
+  }
+
+  // Traverse left children
+  const leftStartY = maxTotalH / 2 - leftTotalH / 2;
+  childY = leftStartY;
+  for (let i = 0; i < leftChildren.length; i++) {
+    const originalIdx = half + i;
+    const childPath = `root-${originalIdx}`;
+    traverse(
+      leftChildren[i],
+      "root",
+      1,
+      childY,
+      childPath,
+      [originalIdx],
+      undefined,
+      "left"
+    );
+    childY += subtreeHeight(leftChildren[i], childPath, collapsedPaths) + NODE_GAP;
+  }
+
   return { nodes, edges, maxDepth };
 }
 
@@ -406,81 +499,74 @@ function MindmapInner({ data }: MindmapViewProps) {
     setTimeout(() => fitView({ padding: 0.2, duration: 500 }), 50);
   }, [data.data, fitView]);
 
-  // Download as PNG — draws directly onto a Canvas for reliability
-  const handleDownload = useCallback(() => {
-    if (nodes.length === 0) return;
+  // Download as PNG — captures the actual React Flow DOM for pixel-perfect output
+  const handleDownload = useCallback(async () => {
+    const flowEl = flowRef.current?.querySelector(".react-flow__viewport") as HTMLElement | null;
+    if (!flowEl || nodes.length === 0) return;
 
-    const SCALE = 2; // retina quality
+    // Get the bounding box of all nodes from React Flow
+    const nodeBounds = getNodesBounds(nodes);
     const PADDING = 80;
-    const NODE_W = 180;
-    const NODE_H = 36;
+    const TITLE_H = 60;
 
-    // Compute bounds
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const n of nodes) {
-      const x = n.position.x;
-      const y = n.position.y;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x + NODE_W > maxX) maxX = x + NODE_W;
-      if (y + NODE_H > maxY) maxY = y + NODE_H;
+    // Measure actual rendered node sizes from the DOM
+    const nodeEls = flowRef.current?.querySelectorAll(".react-flow__node");
+    let realMaxX = nodeBounds.x + nodeBounds.width;
+    let realMaxY = nodeBounds.y + nodeBounds.height;
+    let realMinX = nodeBounds.x;
+    let realMinY = nodeBounds.y;
+    if (nodeEls) {
+      for (const el of nodeEls) {
+        const htmlEl = el as HTMLElement;
+        const x = parseFloat(htmlEl.style.left || htmlEl.getAttribute("data-x") || "0") ||
+          (htmlEl.getBoundingClientRect().x - flowEl.getBoundingClientRect().x);
+        const y = parseFloat(htmlEl.style.top || htmlEl.getAttribute("data-y") || "0") ||
+          (htmlEl.getBoundingClientRect().y - flowEl.getBoundingClientRect().y);
+        // Use transform to get actual position
+        const transform = htmlEl.style.transform;
+        const match = transform?.match(/translate\(([^,]+),\s*([^)]+)\)/);
+        if (match) {
+          const tx = parseFloat(match[1]);
+          const ty = parseFloat(match[2]);
+          const w = htmlEl.offsetWidth;
+          const h = htmlEl.offsetHeight;
+          if (tx < realMinX) realMinX = tx;
+          if (ty < realMinY) realMinY = ty;
+          if (tx + w > realMaxX) realMaxX = tx + w;
+          if (ty + h > realMaxY) realMaxY = ty + h;
+        }
+      }
     }
 
-    // Title height
-    const TITLE_H = 60;
-    const canvasW = (maxX - minX + PADDING * 2);
-    const canvasH = (maxY - minY + PADDING * 2 + TITLE_H);
+    const contentW = realMaxX - realMinX;
+    const contentH = realMaxY - realMinY;
+    const imgW = contentW + PADDING * 2;
+    const imgH = contentH + PADDING * 2 + TITLE_H;
+    const SCALE = 2;
 
+    // Create a canvas
     const canvas = document.createElement("canvas");
-    canvas.width = canvasW * SCALE;
-    canvas.height = canvasH * SCALE;
+    canvas.width = imgW * SCALE;
+    canvas.height = imgH * SCALE;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.scale(SCALE, SCALE);
 
     // White background
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvasW, canvasH);
+    ctx.fillRect(0, 0, imgW, imgH);
 
     // Title
     ctx.fillStyle = "#1e293b";
-    ctx.font = "bold 24px 'DM Sans', 'Inter', sans-serif";
+    ctx.font = "bold 24px 'DM Sans', 'Inter', system-ui, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(data.role, canvasW / 2, PADDING / 2 + 12);
+    ctx.textBaseline = "middle";
+    ctx.fillText(data.role, imgW / 2, TITLE_H / 2 + PADDING / 4);
 
-    const offsetX = -minX + PADDING;
-    const offsetY = -minY + PADDING + TITLE_H;
+    const offsetX = -realMinX + PADDING;
+    const offsetY = -realMinY + PADDING + TITLE_H;
 
-    // Build node position lookup for edges
-    const nodePos: Record<string, { x: number; y: number }> = {};
-    for (const n of nodes) {
-      nodePos[n.id] = { x: n.position.x + offsetX, y: n.position.y + offsetY };
-    }
-
-    // Draw edges (smoothstep-like: horizontal from source, then vertical, then horizontal to target)
-    for (const e of edges) {
-      const src = nodePos[e.source];
-      const tgt = nodePos[e.target];
-      if (!src || !tgt) continue;
-
-      const x1 = src.x + NODE_W;
-      const y1 = src.y + NODE_H / 2;
-      const x2 = tgt.x;
-      const y2 = tgt.y + NODE_H / 2;
-      const midX = (x1 + x2) / 2;
-
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.bezierCurveTo(midX, y1, midX, y2, x2, y2);
-      const edgeStyle = e.style as Record<string, unknown> | undefined;
-      ctx.strokeStyle = (edgeStyle?.stroke as string) || "#a5b4fc";
-      ctx.lineWidth = (edgeStyle?.strokeWidth as number) || 1.5;
-      ctx.globalAlpha = (edgeStyle?.opacity as number) || 0.6;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-
-    // Helper: parse color that may be hex or rgb(...)
+    // Helper functions
     function parseColor(c: string): { r: number; g: number; b: number } {
       if (c.startsWith("rgb")) {
         const m = c.match(/\d+/g);
@@ -498,24 +584,95 @@ function MindmapInner({ data }: MindmapViewProps) {
       return 0.299 * r + 0.587 * g + 0.114 * b;
     }
 
+    // Measure each node's actual rendered width by using canvas text measurement
+    // and store positions + dimensions
+    const nodeRects: Record<string, { x: number; y: number; w: number; h: number; side: string }> = {};
+    for (const n of nodes) {
+      const nd = n.data as Record<string, unknown>;
+      const isRoot = nd.isRoot as boolean;
+      const depth = (nd.depth as number) || 0;
+      const label = nd.label as string;
+      const side = (nd.side as string) || "right";
+      const fontSize = isRoot ? 16 : depth === 1 ? 14 : 13;
+      const fontWeight = isRoot ? "bold" : depth === 1 ? "600" : "500";
+      ctx.font = `${fontWeight} ${fontSize}px 'DM Sans', 'Inter', system-ui, sans-serif`;
+      const textW = ctx.measureText(label).width;
+      const padX = isRoot ? 40 : 28;
+      const padY = isRoot ? 20 : 14;
+      const nodeW = Math.max(textW + padX, isRoot ? 140 : 80);
+      const nodeH = fontSize + padY;
+
+      // For left-side nodes, align right edge to position.x + some offset
+      // (react-flow positions are top-left of node)
+      const x = n.position.x + offsetX;
+      const y = n.position.y + offsetY;
+      nodeRects[n.id] = { x, y, w: nodeW, h: nodeH, side };
+    }
+
+    // Draw edges using sharp right-angle step paths
+    for (const e of edges) {
+      const src = nodeRects[e.source];
+      const tgt = nodeRects[e.target];
+      if (!src || !tgt) continue;
+
+      const tgtSide = tgt.side;
+
+      let x1: number, y1: number, x2: number, y2: number;
+
+      if (tgtSide === "left") {
+        x1 = src.x;
+        y1 = src.y + src.h / 2;
+        x2 = tgt.x + tgt.w;
+        y2 = tgt.y + tgt.h / 2;
+      } else {
+        x1 = src.x + src.w;
+        y1 = src.y + src.h / 2;
+        x2 = tgt.x;
+        y2 = tgt.y + tgt.h / 2;
+      }
+
+      const edgeStyle = e.style as Record<string, unknown> | undefined;
+      ctx.strokeStyle = (edgeStyle?.stroke as string) || "#a5b4fc";
+      ctx.lineWidth = (edgeStyle?.strokeWidth as number) || 1.5;
+      ctx.globalAlpha = (edgeStyle?.opacity as number) || 0.6;
+
+      const midX = (x1 + x2) / 2;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+
+      if (Math.abs(y2 - y1) < 1) {
+        ctx.lineTo(x2, y2);
+      } else {
+        // Sharp right-angle: horizontal to midX, vertical to target Y, horizontal to target
+        ctx.lineTo(midX, y1);
+        ctx.lineTo(midX, y2);
+        ctx.lineTo(x2, y2);
+      }
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // Draw nodes
     for (const n of nodes) {
       const nd = n.data as Record<string, unknown>;
-      const x = n.position.x + offsetX;
-      const y = n.position.y + offsetY;
       const isRoot = nd.isRoot as boolean;
       const color = nd.color as string | undefined;
       const depth = (nd.depth as number) || 0;
       const label = nd.label as string;
+      const rect = nodeRects[n.id];
+      const { x, y, w: nodeW, h: nodeH } = rect;
 
       // Compute background color (matching the CustomNode logic)
       let bg = "#f8fafc";
       let txtCol = "#1e293b";
+      let borderCol = "#e2e8f0";
       if (isRoot) {
         bg = "#4338ca";
         txtCol = "#ffffff";
+        borderCol = "#3730a3";
       } else if (color) {
-        // Apply depth-based tinting
         const tintFactor = depth <= 1 ? 0 : depth === 2 ? 0.25 : depth === 3 ? 0.45 : 0.6;
         if (tintFactor === 0) {
           bg = color;
@@ -524,37 +681,86 @@ function MindmapInner({ data }: MindmapViewProps) {
           bg = `rgb(${Math.round(r + (255 - r) * tintFactor)}, ${Math.round(g + (255 - g) * tintFactor)}, ${Math.round(b + (255 - b) * tintFactor)})`;
         }
         txtCol = luminance(bg) > 160 ? "#1e293b" : "#ffffff";
+        borderCol = color;
       }
 
-      // Measure text to compute node width
-      ctx.font = `${isRoot ? "bold" : depth === 1 ? "600" : "500"} ${isRoot ? 14 : 12}px 'DM Sans', 'Inter', sans-serif`;
-      const textW = ctx.measureText(label).width;
-      const nodeW = Math.max(textW + 24, 80);
-
       // Rounded rect
-      const r = 8;
+      const r = 10;
       ctx.beginPath();
       ctx.moveTo(x + r, y);
       ctx.lineTo(x + nodeW - r, y);
       ctx.arcTo(x + nodeW, y, x + nodeW, y + r, r);
-      ctx.lineTo(x + nodeW, y + NODE_H - r);
-      ctx.arcTo(x + nodeW, y + NODE_H, x + nodeW - r, y + NODE_H, r);
-      ctx.lineTo(x + r, y + NODE_H);
-      ctx.arcTo(x, y + NODE_H, x, y + NODE_H - r, r);
+      ctx.lineTo(x + nodeW, y + nodeH - r);
+      ctx.arcTo(x + nodeW, y + nodeH, x + nodeW - r, y + nodeH, r);
+      ctx.lineTo(x + r, y + nodeH);
+      ctx.arcTo(x, y + nodeH, x, y + nodeH - r, r);
       ctx.lineTo(x, y + r);
       ctx.arcTo(x, y, x + r, y, r);
       ctx.closePath();
-      ctx.fillStyle = bg;
-      ctx.fill();
-      ctx.strokeStyle = isRoot ? "#3730a3" : color || "#e2e8f0";
-      ctx.lineWidth = 1.5;
+
+      // Shadow for root
+      if (isRoot) {
+        ctx.save();
+        ctx.shadowColor = "rgba(67, 56, 202, 0.3)";
+        ctx.shadowBlur = 14;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = bg;
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = bg;
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = borderCol;
+      ctx.lineWidth = 2;
       ctx.stroke();
 
       // Text
+      const fontSize = isRoot ? 16 : depth === 1 ? 14 : 13;
+      const fontWeight = isRoot ? "bold" : depth === 1 ? "600" : "500";
+      ctx.font = `${fontWeight} ${fontSize}px 'DM Sans', 'Inter', system-ui, sans-serif`;
       ctx.fillStyle = txtCol;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(label, x + nodeW / 2, y + NODE_H / 2 + 1);
+      ctx.fillText(label, x + nodeW / 2, y + nodeH / 2);
+
+      // Collapsed badge
+      const collapsed = nd.collapsed as boolean;
+      const childCount = nd.childCount as number;
+      if (collapsed && childCount > 0) {
+        const badgeText = `${childCount}`;
+        ctx.font = "bold 10px 'DM Sans', 'Inter', system-ui, sans-serif";
+        const badgeW = Math.max(ctx.measureText(badgeText).width + 10, 18);
+        const badgeH = 16;
+        const badgeX = x + nodeW / 2 + ctx.measureText(label).width / 2 + 6;
+        // Use the main font to measure label width
+        ctx.font = `${fontWeight} ${fontSize}px 'DM Sans', 'Inter', system-ui, sans-serif`;
+        const labelW = ctx.measureText(label).width;
+        const bx = x + nodeW / 2 + labelW / 2 + 6;
+        const by = y + nodeH / 2 - badgeH / 2;
+
+        ctx.beginPath();
+        const br = badgeH / 2;
+        ctx.moveTo(bx + br, by);
+        ctx.lineTo(bx + badgeW - br, by);
+        ctx.arcTo(bx + badgeW, by, bx + badgeW, by + br, br);
+        ctx.lineTo(bx + badgeW, by + badgeH - br);
+        ctx.arcTo(bx + badgeW, by + badgeH, bx + badgeW - br, by + badgeH, br);
+        ctx.lineTo(bx + br, by + badgeH);
+        ctx.arcTo(bx, by + badgeH, bx, by + badgeH - br, br);
+        ctx.lineTo(bx, by + br);
+        ctx.arcTo(bx, by, bx + br, by, br);
+        ctx.closePath();
+        ctx.fillStyle = color || "#6366f1";
+        ctx.fill();
+
+        ctx.font = "bold 10px 'DM Sans', 'Inter', system-ui, sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(badgeText, bx + badgeW / 2, by + badgeH / 2);
+      }
     }
 
     // Trigger download
