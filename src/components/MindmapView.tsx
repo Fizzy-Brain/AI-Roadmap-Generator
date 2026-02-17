@@ -88,7 +88,7 @@ function CustomNode({
     borderColor = "#e2e8f0";
   }
 
-  const fontSize = isRoot ? 16 : depth === 1 ? 14 : 13;
+  const fontSize = isRoot ? 18 : depth === 1 ? 15 : 14;
 
   return (
     <div
@@ -101,9 +101,9 @@ function CustomNode({
         background: bgColor,
         border: `2px solid ${borderColor}`,
         borderRadius: 10,
-        padding: isRoot ? "10px 20px" : "7px 14px",
-        minWidth: isRoot ? 140 : 80,
-        maxWidth: 220,
+        padding: isRoot ? "10px 22px" : "8px 16px",
+        minWidth: isRoot ? 150 : 90,
+        maxWidth: 240,
         textAlign: "center",
         boxShadow: isRoot
           ? "0 4px 14px rgba(67, 56, 202, 0.3)"
@@ -171,6 +171,41 @@ function CustomNode({
 }
 
 const nodeTypes = { custom: CustomNode };
+
+/* ─── Custom Tree Edge ──────────────────────────────────────────── */
+import { BaseEdge, type EdgeProps } from "@xyflow/react";
+
+/**
+ * A clean orthogonal tree edge:
+ *   source ──(stub)──┐
+ *                     │
+ *                     └──── target
+ * The vertical segment is placed at a fixed small offset from the
+ * source node, so sibling edges share one clean vertical trunk
+ * and never overlap with other nodes.
+ */
+function TreeEdge({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  style,
+  ...rest
+}: EdgeProps) {
+  // Place the vertical trunk a short fixed distance from the source handle
+  const STUB = 30;
+  const goingRight = targetX > sourceX;
+  const stubX = goingRight ? sourceX + STUB : sourceX - STUB;
+
+  const path =
+    Math.abs(targetY - sourceY) < 1
+      ? `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
+      : `M ${sourceX} ${sourceY} L ${stubX} ${sourceY} L ${stubX} ${targetY} L ${targetX} ${targetY}`;
+
+  return <BaseEdge path={path} style={style} {...rest} />;
+}
+
+const edgeTypes = { tree: TreeEdge };
 
 /* ─── Graph Builder ─────────────────────────────────────────────── */
 interface BuildState {
@@ -277,7 +312,7 @@ function buildFlowGraph(
           strokeWidth: depth <= 2 ? 2.5 : 1.5,
           opacity: 0.6,
         },
-        type: "smoothstep",
+        type: "tree",
       });
     }
 
@@ -593,13 +628,13 @@ function MindmapInner({ data }: MindmapViewProps) {
       const depth = (nd.depth as number) || 0;
       const label = nd.label as string;
       const side = (nd.side as string) || "right";
-      const fontSize = isRoot ? 16 : depth === 1 ? 14 : 13;
+      const fontSize = isRoot ? 18 : depth === 1 ? 15 : 14;
       const fontWeight = isRoot ? "bold" : depth === 1 ? "600" : "500";
       ctx.font = `${fontWeight} ${fontSize}px 'DM Sans', 'Inter', system-ui, sans-serif`;
       const textW = ctx.measureText(label).width;
-      const padX = isRoot ? 40 : 28;
-      const padY = isRoot ? 20 : 14;
-      const nodeW = Math.max(textW + padX, isRoot ? 140 : 80);
+      const padX = isRoot ? 44 : 32;
+      const padY = isRoot ? 20 : 16;
+      const nodeW = Math.max(textW + padX, isRoot ? 150 : 90);
       const nodeH = fontSize + padY;
 
       // For left-side nodes, align right edge to position.x + some offset
@@ -636,7 +671,10 @@ function MindmapInner({ data }: MindmapViewProps) {
       ctx.lineWidth = (edgeStyle?.strokeWidth as number) || 1.5;
       ctx.globalAlpha = (edgeStyle?.opacity as number) || 0.6;
 
-      const midX = (x1 + x2) / 2;
+      // Place vertical trunk a short fixed distance from source (matches the custom TreeEdge)
+      const STUB = 30;
+      const goingRight = x2 > x1;
+      const stubX = goingRight ? x1 + STUB : x1 - STUB;
 
       ctx.beginPath();
       ctx.moveTo(x1, y1);
@@ -644,11 +682,9 @@ function MindmapInner({ data }: MindmapViewProps) {
       if (Math.abs(y2 - y1) < 1) {
         ctx.lineTo(x2, y2);
       } else {
-        // Sharp right-angle: horizontal to midX, vertical to target Y, horizontal to target
-        ctx.lineTo(midX, y1);
-        ctx.lineTo(midX, y2);
+        ctx.lineTo(stubX, y1);
+        ctx.lineTo(stubX, y2);
         ctx.lineTo(x2, y2);
-      }
       }
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -717,7 +753,7 @@ function MindmapInner({ data }: MindmapViewProps) {
       ctx.stroke();
 
       // Text
-      const fontSize = isRoot ? 16 : depth === 1 ? 14 : 13;
+      const fontSize = isRoot ? 18 : depth === 1 ? 15 : 14;
       const fontWeight = isRoot ? "bold" : depth === 1 ? "600" : "500";
       ctx.font = `${fontWeight} ${fontSize}px 'DM Sans', 'Inter', system-ui, sans-serif`;
       ctx.fillStyle = txtCol;
@@ -886,6 +922,7 @@ function MindmapInner({ data }: MindmapViewProps) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={{ padding: 0.15, minZoom: 0.05, maxZoom: 2 }}
           minZoom={0.02}
