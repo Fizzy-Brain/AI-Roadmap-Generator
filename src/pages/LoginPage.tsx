@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { useAppState } from "@/context/AppContext";
 import { adminLogin } from "@/services/api";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { setIsAdmin } = useAppState();
+  const { isAdmin, setIsAdmin } = useAppState();
   const navigate = useNavigate();
+
+  // Redirect if already logged in
+  if (isAdmin) return <Navigate to="/admin" replace />;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

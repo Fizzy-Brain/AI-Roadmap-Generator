@@ -13,11 +13,28 @@ export default function ProgressInsight({ roleName, topics }: ProgressInsightPro
   const [completed, setCompleted] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
-      return saved ? new Set(JSON.parse(saved)) : new Set<string>();
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        // Only keep items that exist in the current topics list
+        const topicSet = new Set(topics);
+        return new Set(parsed.filter((t) => topicSet.has(t)));
+      }
+      return new Set<string>();
     } catch {
       return new Set<string>();
     }
   });
+
+  // Re-filter completed whenever topics change (e.g. regeneration gives new list)
+  useEffect(() => {
+    setCompleted((prev) => {
+      const topicSet = new Set(topics);
+      const filtered = new Set([...prev].filter((t) => topicSet.has(t)));
+      // Only update if something was removed
+      if (filtered.size !== prev.size) return filtered;
+      return prev;
+    });
+  }, [topics]);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify([...completed]));
