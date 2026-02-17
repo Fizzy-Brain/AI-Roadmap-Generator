@@ -17,10 +17,10 @@ export default function Navbar() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-            <span className="text-xs font-bold text-primary-foreground">R</span>
+            <span className="text-xs font-bold text-primary-foreground">L</span>
           </div>
           <span className="font-heading text-xl text-foreground">
-            RoadmapAI
+            LearnIt
           </span>
         </Link>
 

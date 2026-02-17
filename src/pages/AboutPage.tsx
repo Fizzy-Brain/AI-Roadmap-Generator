@@ -6,7 +6,7 @@ const sections = [
     icon: <Lightbulb className="h-5 w-5" />,
     title: "Our Mission",
     content: [
-      "RoadmapAI was created with a simple but powerful mission: to make professional learning paths accessible to everyone. We believe that clear, structured guidance is essential for anyone looking to enter or advance in engineering fields.",
+      "LearnIt was created with a simple but powerful mission: to make professional learning paths accessible to everyone. We believe that clear, structured guidance is essential for anyone looking to enter or advance in engineering fields.",
       "By leveraging artificial intelligence, we provide personalized roadmaps that adapt to the specific needs of each learner, helping them navigate the complex landscape of skills, technologies, and knowledge required for success.",
     ],
   },
@@ -14,15 +14,15 @@ const sections = [
     icon: <Sparkles className="h-5 w-5" />,
     title: "How It Works",
     content: [
-      "RoadmapAI uses advanced AI models to generate comprehensive learning roadmaps for various engineering disciplines and job roles. Our system analyzes the skills, technologies, and knowledge areas required for specific roles and organizes them into a structured, progressive learning path.",
-      "Each roadmap includes a detailed description of the role, the essential skills required, and a step-by-step guide to acquiring those skills. Whether you're just starting your journey or looking to advance your career, RoadmapAI provides the guidance you need.",
+      "LearnIt uses advanced AI models to generate comprehensive learning roadmaps for various engineering disciplines and job roles. Our system analyzes the skills, technologies, and knowledge areas required for specific roles and organizes them into a structured, progressive learning path.",
+      "Each roadmap includes a detailed description of the role, the essential skills required, and a step-by-step guide to acquiring those skills. Whether you're just starting your journey or looking to advance your career, LearnIt provides the guidance you need.",
     ],
   },
   {
     icon: <Cpu className="h-5 w-5" />,
     title: "Our Technology",
     content: [
-      "RoadmapAI is powered by state-of-the-art language models and AI technologies. We use Google Gemini to ensure our roadmaps are comprehensive, accurate, and up-to-date with the latest industry trends and requirements.",
+      "LearnIt is powered by state-of-the-art language models and AI technologies. We use Google Gemini to ensure our roadmaps are comprehensive, accurate, and up-to-date with the latest industry trends and requirements.",
       "Our platform is built using modern web technologies, including React + Vite for the frontend and Python FastAPI for the backend AI processing. This architecture allows us to deliver fast, responsive experiences while generating detailed, personalized content.",
     ],
   },
@@ -30,12 +30,12 @@ const sections = [
     icon: <Mail className="h-5 w-5" />,
     title: "Contact Us",
     content: [
-      "We're always looking to improve RoadmapAI and would love to hear your feedback. If you have questions, suggestions, or just want to say hello, please reach out to us.",
+      "We're always looking to improve LearnIt and would love to hear your feedback. If you have questions, suggestions, or just want to say hello, please reach out to us.",
     ],
     links: [
-      { label: "Email", href: "mailto:info@roadmapai.com", text: "info@roadmapai.com" },
-      { label: "Twitter", href: "https://twitter.com/roadmapai", text: "@roadmapai" },
-      { label: "LinkedIn", href: "https://linkedin.com/company/roadmapai", text: "RoadmapAI" },
+      { label: "Email", href: "mailto:info@learnit.com", text: "info@learnit.com" },
+      { label: "Twitter", href: "https://twitter.com/learnit", text: "@learnit" },
+      { label: "LinkedIn", href: "https://linkedin.com/company/learnit", text: "LearnIt" },
     ],
   },
 ];
